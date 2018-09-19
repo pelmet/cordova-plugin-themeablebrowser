@@ -65,6 +65,7 @@
     int _framesOpened;  // number of frames opened since the last time browser exited
     NSURL *initUrl;  // initial URL ThemeableBrowser opened with
     NSURL *originalUrl;
+    UIWindow * tmpWindow;
 }
 @end
 
@@ -328,10 +329,23 @@
                                    initWithRootViewController:self.themeableBrowserViewController];
     nav.orientationDelegate = self.themeableBrowserViewController;
     nav.navigationBarHidden = YES;
+
+    __weak CDVThemeableBrowser* weakSelf = self;
+
     // Run later to avoid the "took a long time" log message.
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.themeableBrowserViewController != nil) {
-            [self.viewController presentViewController:nav animated:animated completion:nil];
+        if (weakSelf.themeableBrowserViewController != nil) {
+            if (!tmpWindow) {
+                CGRect frame = [[UIScreen mainScreen] bounds];
+                tmpWindow = [[UIWindow alloc] initWithFrame:frame];
+            }
+
+            UIViewController *tmpController = [[UIViewController alloc] init];
+            double baseWindowLevel = [UIApplication sharedApplication].keyWindow.windowLevel;
+            [tmpWindow setRootViewController:tmpController];
+            [tmpWindow setWindowLevel:baseWindowLevel+1];
+            [tmpWindow makeKeyAndVisible];
+            [tmpController presentViewController:nav animated:YES completion:nil];
         }
     });
 }
@@ -1180,12 +1194,18 @@
         [self.navigationDelegate browserExit];
     }
 
+    __weak UIViewController* weakSelf = self;
+
     // Run later to avoid the "took a long time" log message.
     dispatch_async(dispatch_get_main_queue(), ^{
-        if ([self respondsToSelector:@selector(presentingViewController)]) {
-            [[self presentingViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:nil];
+        if ([weakSelf respondsToSelector:@selector(presentingViewController)]) {
+            [[weakSelf presentingViewController] dismissViewControllerAnimated:YES completion:^{
+                [[[[UIApplication sharedApplication] delegate] window] makeKeyAndVisible];
+            }];
         } else {
-            [[self parentViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:nil];
+            [[weakSelf parentViewController] dismissViewControllerAnimated:YES completion:^{
+                [[[[UIApplication sharedApplication] delegate] window] makeKeyAndVisible];
+            }];
         }
     });
 
